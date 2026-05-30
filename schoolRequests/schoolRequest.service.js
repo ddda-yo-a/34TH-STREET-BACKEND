@@ -294,8 +294,10 @@ async function submitRequest(params) {
   request.lastName = params.lastName;
   request.gender = params.gender;
   request.phone = params.phone;
+  request.schoolName = params.schoolName || null;
   request.schoolEmail = email;
   request.program = params.program;
+  request.graduationYear = params.graduationYear || null;
   request.linkedIn = params.linkedIn;
   request.passwordHash = hash(params.password);
   request.status = 'pending';
@@ -399,8 +401,10 @@ async function approve(id, adminId) {
       phone: request.phone,
       type: 'Student',
       role: 'User',
-      fieldOfStudy: request.program || null,   // ✅ populate from application form
-      linkedIn: request.linkedIn || null,      // ✅ pre-fill from application
+      fieldOfStudy: request.program || null,     // ✅ full program string e.g. "Master of Business Administration (MBA)"
+      graduationYear: request.graduationYear || null, // ✅ expected graduation year
+      schoolName: request.schoolName || null,    // ✅ explicit school name entered during registration
+      linkedIn: request.linkedIn || null,        // ✅ pre-fill from application
       verified: new Date(), // Pre-verified by admin
     });
   } else {
@@ -410,8 +414,10 @@ async function approve(id, adminId) {
     account.lastName = request.lastName;
     account.gender = request.gender;
     account.phone = request.phone;
-    account.fieldOfStudy = request.program || account.fieldOfStudy || null; // ✅ populate
-    account.linkedIn = request.linkedIn || account.linkedIn || null;         // ✅ populate
+    account.fieldOfStudy = request.program || account.fieldOfStudy || null;     // ✅ populate
+    account.graduationYear = request.graduationYear || account.graduationYear || null; // ✅ populate
+    account.schoolName = request.schoolName || account.schoolName || null;       // ✅ populate
+    account.linkedIn = request.linkedIn || account.linkedIn || null;             // ✅ populate
     account.verified = new Date();
   }
 

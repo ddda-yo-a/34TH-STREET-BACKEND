@@ -10,6 +10,7 @@ const alumniRequestSchema = new Schema({
   workEmail: { type: String, trim: true, lowercase: true, default: null },
   schoolGraduatedFrom: { type: String, required: true, trim: true },
   degreeHeld: { type: String, required: true, trim: true },
+  graduationYear: { type: String, default: null },
   linkedIn: { type: String, required: true, trim: true },
   passwordHash: { type: String, required: true },
 

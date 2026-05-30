@@ -398,12 +398,13 @@ async function update(id, params) {
   // ✅ Whitelist fields that users are allowed to update
   const allowed = [
     'title', 'firstName', 'lastName', 'nickname', 'phone', 'origin',
-    'bio', 'interests', 'photos', 'languages', 'fieldOfStudy',
+    'bio', 'interests', 'photos', 'languages', 'fieldOfStudy', 'degreeField',
     'graduationYear', 'industry', 'currentRole', 'linkedIn', 'funFact',
     'rship', 'DOB',
     // ✅ location fields
     'currentCity', 'locationUpdatedAt', 'locationSharingEnabled',
-
+    // ✅ school identity fields (needed for school-not-listed + alumni users)
+    'schoolName', 'schoolGraduatedFrom',
   ];
 
   for (const key of allowed) {
@@ -450,9 +451,11 @@ function basicDetails(account) {
     const {
         id, title, firstName, lastName, email, gender, type,
         phone, origin, bio, interests, photos, created, updated, verified,
-        nickname, DOB, languages, fieldOfStudy, graduationYear,
+        nickname, DOB, languages, fieldOfStudy, degreeField, graduationYear,
         industry, currentRole, linkedIn, funFact, rship, currentCity,
     locationUpdatedAt, locationSharingEnabled,
+    // School fields
+    schoolGraduatedFrom, schoolName,
     // 🔴 Presence fields
     onlineStatus, lastSeen, lastActivity,
     // Recovery email
@@ -466,9 +469,12 @@ function basicDetails(account) {
     return {
         id, title, firstName, lastName, email, gender, type,
         phone, origin, bio, interests, photos, created, updated, verified,
-        nickname, DOB, languages, fieldOfStudy, graduationYear,
+        nickname, DOB, languages, fieldOfStudy, degreeField, graduationYear,
         industry, currentRole, linkedIn, funFact, rship, currentCity,
-    locationUpdatedAt, locationSharingEnabled, 
+    locationUpdatedAt, locationSharingEnabled,
+    // School fields
+    schoolGraduatedFrom: schoolGraduatedFrom || null,
+    schoolName: schoolName || null,
     currentCity: share ? (currentCity || '') : '',
     locationUpdatedAt: share ? locationUpdatedAt : null,
     // 🔴 Include presence fields in API response

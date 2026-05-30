@@ -3,6 +3,8 @@ const express = require('express');
 const router = express.Router();
 const Notification = require('./notification.model');
 const authorize = require('../_middleware/authorize');
+const Account = require('../accounts/account.model');
+const { sendExpoPush } = require('../messages/utils/push');
 
 // Get all notifications for current user
 router.get('/', authorize(), async (req, res, next) => {
@@ -137,8 +139,9 @@ async function createNotification({ recipient, sender, type, post, comment, chat
     return null;
   }
   
+  let notification = null;
   try {
-    const notification = new Notification({
+    notification = new Notification({
       recipient,
       sender,
       type,
@@ -160,12 +163,76 @@ async function createNotification({ recipient, sender, type, post, comment, chat
     if (chatroomMessage) {
       await notification.populate('chatroomMessage', 'message chatroomId');
     }
-    
-    return notification;
   } catch (error) {
     console.error('Create notification error:', error);
     return null;
   }
+
+  // Best-effort push to recipient — non-blocking so a push failure never breaks the caller
+  try {
+    const recipientAccount = await Account.findById(recipient).select('expoPushToken pushToken').lean();
+    const pushToken = recipientAccount?.expoPushToken || recipientAccount?.pushToken;
+    const senderName = notification?.sender?.firstName || 'Someone';
+
+    if (pushToken) {
+      let pushTitle = 'New notification';
+      let pushBody  = '';
+      let channelId = 'default';
+      let data      = { kind: 'notification', type };
+
+      if (type === 'like_post' || type === 'like_comment' || type === 'like_reply') {
+        pushTitle = `${senderName} liked your ${type === 'like_post' ? 'post' : 'comment'}`;
+        channelId = 'default';
+        if (post) data = { kind: 'mention', postId: String(post?._id || post), type };
+      } else if (type === 'comment') {
+        pushTitle = `${senderName} commented on your post`;
+        pushBody  = message || '';
+        channelId = 'mentions';
+        if (post) data = { kind: 'mention', postId: String(post?._id || post), type };
+      } else if (type === 'mention_post' || type === 'mention_comment' || type === 'mention_reply') {
+        pushTitle = `${senderName} mentioned you`;
+        pushBody  = message || '';
+        channelId = 'mentions';
+        if (post) data = { kind: 'mention', postId: String(post?._id || post), type };
+      } else if (type === 'reply_comment' || type === 'reply_thread') {
+        pushTitle = `${senderName} replied to your comment`;
+        pushBody  = message || '';
+        channelId = 'mentions';
+        if (post) data = { kind: 'mention', postId: String(post?._id || post), type };
+      } else if (type === 'connection_request') {
+        pushTitle = `${senderName} sent you a connection request`;
+        channelId = 'connections';
+        data = { kind: 'connection', type, senderId: String(sender) };
+      } else if (type === 'connection_accepted') {
+        pushTitle = `${senderName} accepted your connection request`;
+        channelId = 'connections';
+        data = { kind: 'connection', type, senderId: String(sender) };
+      } else if (type === 'chatroom_mention') {
+        pushTitle = `${senderName} mentioned you in a group`;
+        pushBody  = message || '';
+        channelId = 'group-messages';
+        if (chatroom) data = { kind: 'group', chatroomId: String(chatroom), chatroomName: chatroomName || 'Group', type };
+      } else if (type === 'chatroom_like' || type === 'chatroom_reply') {
+        pushTitle = `${senderName} ${type === 'chatroom_like' ? 'liked' : 'replied to'} your message`;
+        channelId = 'group-messages';
+        if (chatroom) data = { kind: 'group', chatroomId: String(chatroom), chatroomName: chatroomName || 'Group', type };
+      } else if (type === 'share') {
+        pushTitle = `${senderName} shared your post`;
+        channelId = 'default';
+        if (post) data = { kind: 'mention', postId: String(post?._id || post), type };
+      } else if (type === 'follow') {
+        pushTitle = `${senderName} followed you`;
+        channelId = 'connections';
+        data = { kind: 'connection', type, senderId: String(sender) };
+      }
+
+      await sendExpoPush({ to: pushToken, title: pushTitle, body: pushBody, channelId, data });
+    }
+  } catch (pushErr) {
+    console.error('Notification push error:', pushErr?.message);
+  }
+
+  return notification;
 }
 
 module.exports = router;

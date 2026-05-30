@@ -12,6 +12,8 @@ const jwt = require('jsonwebtoken');
 const config = require('../config.js');
 const Account = require('./account.model');
 const bcrypt = require('bcryptjs');
+const SchoolRequest = require('../schoolRequests/schoolRequest.model');
+const AlumniRequest = require('../alumniRequests/alumniRequest.model');
 const containsObjectionableContent = require('../utils/filterObjectionableContent');
 const { addDistancesToUsers, sortByDistance } = require('../utils/locationUtils');
 
@@ -315,7 +317,7 @@ function getAll(req, res, next) {
 function getById(req, res, next) {
     
     accountService.getById(req.params.id)
-        .then(account => {
+        .then(async account => {
             if (!account) return res.sendStatus(404);
             const data = account.toJSON ? account.toJSON() : { ...account };
             // Strip exact coordinates for privacy — only expose city name
@@ -324,6 +326,59 @@ function getById(req, res, next) {
                 data.currentCity = '';
                 data.locationUpdatedAt = null;
             }
+
+            // ── Live backfill: if schoolName or schoolGraduatedFrom is missing, recover it
+            // from the original request record. This handles accounts approved before the
+            // schoolName field was wired into the service. Once patched, future fetches skip this.
+            try {
+                let patched = false;
+
+                // School-not-listed: look up SchoolRequest by school email
+                if (!data.schoolName) {
+                    const req2 = await SchoolRequest.findOne({
+                        schoolEmail: data.email,
+                        status: 'approved',
+                    }).lean();
+                    if (req2 && req2.schoolName) {
+                        data.schoolName = req2.schoolName;
+                        account.schoolName = req2.schoolName;
+                        patched = true;
+                    }
+                    // Also backfill fieldOfStudy if missing
+                    if (req2 && req2.program && !data.fieldOfStudy) {
+                        data.fieldOfStudy = req2.program;
+                        account.fieldOfStudy = req2.program;
+                        patched = true;
+                    }
+                }
+
+                // Alumni: look up AlumniRequest by work or personal email
+                if (!data.schoolGraduatedFrom) {
+                    const req3 = await AlumniRequest.findOne({
+                        $or: [{ workEmail: data.email }, { personalEmail: data.email }],
+                        status: 'approved',
+                    }).lean();
+                    if (req3 && req3.schoolGraduatedFrom) {
+                        data.schoolGraduatedFrom = req3.schoolGraduatedFrom;
+                        account.schoolGraduatedFrom = req3.schoolGraduatedFrom;
+                        patched = true;
+                    }
+                    if (req3 && req3.degreeHeld && !data.fieldOfStudy) {
+                        data.fieldOfStudy = req3.degreeHeld;
+                        account.fieldOfStudy = req3.degreeHeld;
+                        patched = true;
+                    }
+                }
+
+                // Persist the backfilled values so future fetches skip this lookup
+                if (patched) {
+                    await account.save();
+                }
+            } catch (backfillErr) {
+                // Non-fatal — just log and continue with whatever data we have
+                console.warn('[getById] Live backfill failed (non-fatal):', backfillErr?.message);
+            }
+
             return res.json({ user: data });
         })
         .catch(next);

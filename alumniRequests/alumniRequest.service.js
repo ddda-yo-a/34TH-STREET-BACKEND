@@ -242,6 +242,7 @@ async function submitRequest(params) {
   request.workEmail = params.workEmail ? params.workEmail.toLowerCase().trim() : null;
   request.schoolGraduatedFrom = params.schoolGraduatedFrom;
   request.degreeHeld = params.degreeHeld;
+  request.graduationYear = params.graduationYear || null;
   request.linkedIn = params.linkedIn;
   request.passwordHash = hash(params.password);
   request.status = 'pending';
@@ -332,6 +333,7 @@ async function approve(id, adminId) {
       // Alumni-specific profile data
       schoolGraduatedFrom: request.schoolGraduatedFrom,
       fieldOfStudy: request.degreeHeld,
+      graduationYear: request.graduationYear || null,
       linkedIn: request.linkedIn,
     });
   } else {
@@ -343,6 +345,7 @@ async function approve(id, adminId) {
     account.verified = new Date();
     account.schoolGraduatedFrom = request.schoolGraduatedFrom;
     account.fieldOfStudy = request.degreeHeld;
+    account.graduationYear = request.graduationYear || account.graduationYear || null;
     account.linkedIn = request.linkedIn;
   }
 

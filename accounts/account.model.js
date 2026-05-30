@@ -48,6 +48,7 @@ const schema = new Schema({
     photos: [String],
     languages: [{ type: String }],
     fieldOfStudy: { type: String },
+    degreeField: { type: String, default: null },   // User-editable "Degree / Field of Study" (SNL & alumni edit profile)
     graduationYear: { type: String },
     industry: { type: String },
     currentRole: { type: String },
@@ -56,6 +57,8 @@ const schema = new Schema({
     rship: { type: String },
     // Alumni-specific
     schoolGraduatedFrom: { type: String, default: null },
+    // SchoolNotListed-specific (explicitly entered school name)
+    schoolName: { type: String, default: null },
     welcomeEmailSent: { type: Boolean, default: false },
 
     // Recovery email (personal email for login after graduation)

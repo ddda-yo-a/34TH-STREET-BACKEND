@@ -261,24 +261,27 @@ return res.status(403).json({ message: 'Messaging not allowed. One of the users 
       // });
     }
 
-    // 4) Push notification (best effort)
+    // 4) Push notification — only for offline recipients (socket handles foreground delivery)
     try {
-      const recipient = await db.Account.findById(recipientId).lean().exec();
-      const recipientPushToken = recipient?.expoPushToken || recipient?.pushToken;
-      if (recipientPushToken) {
-        await sendExpoPush({
-          to: recipientPushToken,
-          sound: 'default',
-          title: `New message from ${senderName}`,
-          body: preview,
-          data: {
-            kind: 'dm',
-            senderId: String(senderId),
-            senderName,
-            otherUserId: String(senderId),
-            preview,
-          },
-        });
+      const isRecipientOnline = Boolean(connectedUsers?.[String(recipientId)]);
+      if (!isRecipientOnline) {
+        const recipient = await db.Account.findById(recipientId).lean().exec();
+        const recipientPushToken = recipient?.expoPushToken || recipient?.pushToken;
+        if (recipientPushToken) {
+          await sendExpoPush({
+            to: recipientPushToken,
+            sound: 'default',
+            title: `New message from ${senderName}`,
+            body: preview,
+            data: {
+              kind: 'dm',
+              senderId: String(senderId),
+              senderName,
+              otherUserId: String(senderId),
+              preview,
+            },
+          });
+        }
       }
     } catch (e) {
       console.error('Failed to send Expo push:', e?.message || e);

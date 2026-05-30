@@ -15,6 +15,7 @@ router.post('/submit', submitSchema, submit);
 // ─── Admin Routes ──────────────────────────────────────
 router.get('/', authorize(Role.Admin), getAll);
 router.get('/stats', authorize(Role.Admin), getStats);
+router.post('/migrate-backfill', authorize(Role.Admin), backfillApprovedAccounts);
 router.get('/:id', authorize(Role.Admin), getById);
 router.post('/:id/approve', authorize(Role.Admin), approveRequest);
 router.post('/:id/deny', authorize(Role.Admin), denyRequest);
@@ -57,6 +58,7 @@ function submitSchema(req, res, next) {
     workEmail: Joi.string().email().allow('', null).optional(),
     schoolGraduatedFrom: Joi.string().required(),
     degreeHeld: Joi.string().required(),
+    graduationYear: Joi.string().length(4).pattern(/^[0-9]+$/).allow('', null).optional(),
     linkedIn: Joi.string().uri().required(),
     password: Joi.string().min(6).required(),
     confirmPassword: Joi.string().valid(Joi.ref('password')).required(),
@@ -103,4 +105,63 @@ function approveRequest(req, res, next) {
 function denyRequest(req, res, next) {
   const reason = req.body.reason || null;
   alumniRequestService.deny(req.params.id, req.user.id, reason).then((r) => res.json(r)).catch(next);
+}
+
+/**
+ * POST /api/alumni-requests/migrate-backfill  (Admin only)
+ *
+ * One-time migration: for every approved alumni request, find the linked
+ * Account and patch any missing schoolGraduatedFrom / fieldOfStudy fields.
+ * Safe to run multiple times — only overwrites null/empty values.
+ */
+async function backfillApprovedAccounts(req, res, next) {
+  try {
+    const AlumniRequest = require('./alumniRequest.model');
+    const Account = require('../accounts/account.model');
+
+    const approved = await AlumniRequest.find({ status: 'approved' });
+    const results = { updated: 0, skipped: 0, errors: [] };
+
+    for (const request of approved) {
+      try {
+        // Alumni login email is workEmail (if provided) or personalEmail
+        const loginEmail = (request.workEmail && request.workEmail !== 'pending@pending.com')
+          ? request.workEmail
+          : request.personalEmail;
+
+        const account = await Account.findOne({ email: loginEmail });
+        if (!account) { results.skipped++; continue; }
+
+        let changed = false;
+
+        // Backfill schoolGraduatedFrom if missing
+        if (!account.schoolGraduatedFrom && request.schoolGraduatedFrom) {
+          account.schoolGraduatedFrom = request.schoolGraduatedFrom;
+          changed = true;
+        }
+
+        // Backfill fieldOfStudy (degreeHeld) if missing
+        if (!account.fieldOfStudy && request.degreeHeld) {
+          account.fieldOfStudy = request.degreeHeld;
+          changed = true;
+        }
+
+        if (changed) {
+          await account.save();
+          results.updated++;
+        } else {
+          results.skipped++;
+        }
+      } catch (err) {
+        results.errors.push({ email: request.personalEmail, error: err.message });
+      }
+    }
+
+    res.json({
+      message: 'Alumni backfill complete.',
+      ...results,
+    });
+  } catch (err) {
+    next(err);
+  }
 }

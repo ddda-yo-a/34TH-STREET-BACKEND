@@ -286,9 +286,9 @@ io.on('connection', (socket) => {
         const chatroomDoc = await Chatroom.findById(chatroomId).select('name').lean();
         const chatroomName = chatroomDoc?.name || 'Group chat';
 
-        // Get push tokens for all members EXCEPT the sender
+        // Get push tokens for members who are NOT connected via socket (offline only)
         const offlineMembers = chatroom.members.filter(
-          memberId => String(memberId) !== String(senderId)
+          memberId => String(memberId) !== String(senderId) && !connectedUsers[String(memberId)]
         );
 
         if (offlineMembers.length) {
@@ -762,11 +762,60 @@ app.set('connectedUsers', connectedUsers);
 app.set('io', io);
 app.set('connectedUsers', connectedUsers);
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Startup migration: backfill missing schoolName / fieldOfStudy / graduationYear
+// for accounts that were approved before these fields were stored.
+// Safe to run on every restart — only patches null/empty values.
+// ──────────────────────────────────────────────────────────────────────────────
+async function runStartupMigration() {
+  try {
+    const SchoolRequest = require('./schoolRequests/schoolRequest.model');
+    const AlumniRequest = require('./alumniRequests/alumniRequest.model');
 
-// ✅ Start both HTTP and WebSocket servers
+    let schoolFixed = 0, alumniFixed = 0;
+
+    // ── School Not Listed ─────────────────────────────────────────────────────
+    const schoolApproved = await SchoolRequest.find({ status: 'approved' });
+    for (const req of schoolApproved) {
+      const account = await Account.findOne({ email: req.schoolEmail });
+      if (!account) continue;
+      let changed = false;
+      if (!account.schoolName && req.schoolName)             { account.schoolName = req.schoolName;         changed = true; }
+      if (!account.fieldOfStudy && req.program)              { account.fieldOfStudy = req.program;          changed = true; }
+      if (!account.graduationYear && req.graduationYear)     { account.graduationYear = req.graduationYear; changed = true; }
+      if (changed) { await account.save(); schoolFixed++; }
+    }
+
+    // ── Alumni ────────────────────────────────────────────────────────────────
+    const alumniApproved = await AlumniRequest.find({ status: 'approved' });
+    for (const req of alumniApproved) {
+      const loginEmail = (req.workEmail && req.workEmail !== 'pending@pending.com')
+        ? req.workEmail : req.personalEmail;
+      const account = await Account.findOne({ email: loginEmail });
+      if (!account) continue;
+      let changed = false;
+      if (!account.schoolGraduatedFrom && req.schoolGraduatedFrom) { account.schoolGraduatedFrom = req.schoolGraduatedFrom; changed = true; }
+      if (!account.fieldOfStudy && req.degreeHeld)                  { account.fieldOfStudy = req.degreeHeld;                 changed = true; }
+      if (!account.graduationYear && req.graduationYear)            { account.graduationYear = req.graduationYear;           changed = true; }
+      if (changed) { await account.save(); alumniFixed++; }
+    }
+
+    if (schoolFixed + alumniFixed > 0) {
+      console.log(`✅ [Migration] Patched ${schoolFixed} school-not-listed + ${alumniFixed} alumni accounts with missing profile data.`);
+    } else {
+      console.log('✅ [Migration] All accounts already up to date.');
+    }
+  } catch (err) {
+    console.error('❌ [Migration] Startup migration failed (non-fatal):', err?.message);
+  }
+}
+
+
 const port = process.env.NODE_ENV === 'production' ? (process.env.PORT || 80) : 4000;
 server.listen(port, () => {
     console.log(`🚀 Server listening on http://localhost:${port}`);
+    // Run data backfill after server is up — fixes existing accounts missing schoolName / fieldOfStudy
+    runStartupMigration().catch((err) => console.error('⚠️ Startup migration error (non-fatal):', err?.message));
 });
 
 // ✅ Graceful shutdown — close connections cleanly on deploy/restart

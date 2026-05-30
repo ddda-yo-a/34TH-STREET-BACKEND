@@ -6,8 +6,10 @@ const schoolRequestSchema = new Schema({
   lastName: { type: String, required: true, trim: true },
   gender: { type: String, required: true, enum: ['Male', 'Female', 'Non-binary'] },
   phone: { type: String, required: true, trim: true },
+  schoolName: { type: String, trim: true, default: null },
   schoolEmail: { type: String, required: true, trim: true, lowercase: true },
   program: { type: String, required: true, trim: true },
+  graduationYear: { type: String, default: null },
   linkedIn: { type: String, required: true, trim: true },
   passwordHash: { type: String, required: true },
 
