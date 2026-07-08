@@ -19,12 +19,12 @@ const { addDistancesToUsers, sortByDistance } = require('../utils/locationUtils'
 
 
 // routes
-router.post('/authenticates', authenticateSchema, authenticate);
+router.post('/authenticate', authenticateSchema, authenticate);
 router.post('/refresh-token', refreshToken);
 router.post('/revoke-token', authorize(), revokeTokenSchema, revokeToken);
 router.post('/register', registerSchema, register);
 router.post('/verify-email', verifyEmailSchema, verifyEmail);
-router.post('/resend-otps', resendOTPSchema, resendOTP);
+router.post('/resend-otp', resendOTPSchema, resendOTP);
 router.post('/forgot-password', forgotPasswordSchema, forgotPassword);
 router.post('/validate-reset-token', validateResetTokenSchema, validateResetToken);
 router.post('/reset-password', resetPasswordSchema, resetPassword);

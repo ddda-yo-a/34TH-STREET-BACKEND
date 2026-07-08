@@ -17,7 +17,7 @@ const authorize = require('_middleware/authorize');
 const controller = require('./message.controller');
 
 // ✅ Put static route BEFORE the param route
-router.get('/conversations/lists', authorize(), controller.getConversations);
+router.get('/conversations/list', authorize(), controller.getConversations);
 router.get('/:userId', authorize(), controller.getMessages);
 router.post('/', authorize(), controller.sendMessage);
 
